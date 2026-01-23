@@ -1,0 +1,88 @@
+.my-interviews-screen {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0f172a, #020617);
+  padding: 40px;
+  color: white;
+}
+
+.my-interviews-container {
+  max-width: 1200px;
+  margin: auto;
+}
+
+.header h1 {
+  font-size: 32px;
+  margin-bottom: 6px;
+}
+
+.header p {
+  color: #94a3b8;
+}
+
+.interviews-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 30px;
+}
+
+.interview-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,0.1);
+  transition: transform 0.2s;
+}
+
+.interview-card:hover {
+  transform: translateY(-4px);
+}
+
+.status-badge {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.interview-type {
+  margin: 12px 0 6px;
+}
+
+.job-desc {
+  font-size: 14px;
+  color: #cbd5f5;
+}
+
+.meta-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.primary-btn,
+.secondary-btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+}
+
+.primary-btn {
+  background: #6366f1;
+  color: white;
+}
+
+.secondary-btn {
+  background: transparent;
+  border: 1px solid #6366f1;
+  color: #6366f1;
+}
