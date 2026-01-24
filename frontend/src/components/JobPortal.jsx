@@ -21,20 +21,33 @@ const JobPortal = () => {
     try {
       setLoading(true);
       const response = await api.get('/jobs');
+      console.log('All jobs fetched:', response.data.data);
+      
+      if (!response.data.data || response.data.data.length === 0) {
+        console.warn('No jobs found in database');
+      }
+      
       setJobs(response.data.data || []);
       setFilteredJobs(response.data.data || []);
       
       // Check which jobs the student has applied to
       const appliedSet = new Set();
-      for (const job of response.data.data) {
-        const checkRes = await api.get(`/jobs/${job._id}/check-application`);
-        if (checkRes.data.applied) {
-          appliedSet.add(job._id);
-        }
+      if (response.data.data && response.data.data.length > 0) {
+        const checkPromises = response.data.data.map(job =>
+          api.get(`/jobs/${job._id}/check-application`)
+            .then(res => {
+              if (res.data.applied) {
+                appliedSet.add(job._id);
+              }
+            })
+            .catch(err => console.error(`Failed to check application for job ${job._id}:`, err))
+        );
+        await Promise.all(checkPromises);
       }
       setAppliedJobs(appliedSet);
     } catch (error) {
       console.error('Error fetching jobs:', error);
+      alert('Error loading jobs: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -63,6 +76,8 @@ const JobPortal = () => {
   }, [searchQuery, filterJobType, filterCategory, jobs]);
 
   const handleApplyClick = (job) => {
+    console.log('Selected job for application:', job);
+    console.log('Job ID:', job._id);
     if (!appliedJobs.has(job._id)) {
       setSelectedJob(job);
       setApplicationData({});
@@ -70,13 +85,21 @@ const JobPortal = () => {
   };
 
   const handleApplicationSubmit = async () => {
-    if (!selectedJob) return;
+    if (!selectedJob) {
+      alert('No job selected');
+      return;
+    }
 
     try {
+      console.log('Submitting application for job ID:', selectedJob._id);
+      console.log('Application data:', applicationData);
+      
       setSubmittingApplication(true);
-      await api.post(`/jobs/${selectedJob._id}/apply`, {
+      const response = await api.post(`/jobs/${selectedJob._id}/apply`, {
         applicationData
       });
+      
+      console.log('Application response:', response.data);
 
       const newApplied = new Set(appliedJobs);
       newApplied.add(selectedJob._id);
@@ -87,7 +110,14 @@ const JobPortal = () => {
       alert('Application submitted successfully!');
     } catch (error) {
       console.error('Error submitting application:', error);
-      alert(error.response?.data?.message || 'Error submitting application');
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
+      
+      if (error.response?.status === 404) {
+        alert(`Job not found. Job ID: ${selectedJob._id}`);
+      } else {
+        alert(error.response?.data?.message || error.message || 'Error submitting application');
+      }
     } finally {
       setSubmittingApplication(false);
     }

@@ -33,7 +33,17 @@ const JobManagement = () => {
     try {
       setLoading(true);
       const response = await api.get('/jobs?status=active,draft');
-      setJobs(response.data.data || []);
+      console.log('Fetched jobs with status filter:', response.data);
+      
+      if (response.data.data && response.data.data.length > 0) {
+        setJobs(response.data.data);
+      } else {
+        // If no jobs found, try fetching all jobs to debug
+        console.log('No jobs found with status filter, fetching all jobs...');
+        const allJobsResponse = await api.get('/jobs');
+        console.log('All jobs:', allJobsResponse.data);
+        setJobs(allJobsResponse.data.data || []);
+      }
     } catch (error) {
       console.error('Error fetching jobs:', error);
       alert('Error loading jobs');
@@ -50,19 +60,27 @@ const JobManagement = () => {
         openings: parseInt(formData.openings),
         skills: formData.skills.split(',').map(s => s.trim()).filter(s => s)
       };
+      console.log('Creating job with payload:', jobPayload);
 
       if (selectedJob) {
-        await api.put(`/jobs/${selectedJob._id}`, jobPayload);
+        const response = await api.put(`/jobs/${selectedJob._id}`, jobPayload);
+        console.log('Job updated:', response.data);
         alert('Job updated successfully');
       } else {
-        await api.post('/jobs', jobPayload);
+        const response = await api.post('/jobs', jobPayload);
+        console.log('Job created:', response.data);
         alert('Job created successfully');
       }
 
       resetForm();
-      fetchJobs();
+      // Add a slight delay before fetching to ensure backend has processed
+      setTimeout(() => {
+        console.log('Fetching jobs after creation...');
+        fetchJobs();
+      }, 500);
     } catch (error) {
       console.error('Error saving job:', error);
+      console.error('Error response:', error.response?.data);
       alert(error.response?.data?.message || 'Error saving job');
     }
   };

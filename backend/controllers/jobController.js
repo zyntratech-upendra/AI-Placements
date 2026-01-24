@@ -203,7 +203,7 @@ exports.deleteJob = async (req, res) => {
 // @access  Private/Student
 exports.applyForJob = async (req, res) => {
   try {
-    const { jobId } = req.params;
+    const jobId = req.params.id;
     const { applicationData } = req.body;
 
     // Check if job exists
