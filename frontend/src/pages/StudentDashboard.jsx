@@ -348,17 +348,24 @@ const StudentDashboard = () => {
                 {[
                   { id: 'overview', label: '📊 Overview', icon: '📊' },
                   { id: 'practice', label: '🎯 Practice', icon: '🎯' },
-                  { id: 'resume', label: '📄 Resume Based Exam', icon: '📄' },
+                  { id: 'resumeExam', label: '📄 Resume Based Exam', icon: '📄' },
                   { id: 'exams', label: '📝 Exams', icon: '📝' },
                   { id: 'targeted', label: '🎪 Targeted', icon: '🎪' },
                   { id: 'interviews', label: '🤖 AI Interviews', icon: '🤖' },
                   { id: 'jobs', label: '💼 Jobs', icon: '💼' },
+                  { id: 'resumeBuilder', label: '📄 Resume', icon: '📄' },
                   { id: 'progress', label: '📊 My Progress', icon: '📊' },
                   { id: 'history', label: '📈 History', icon: '📈' },
                 ].map(tab => (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      if (tab.id === 'resumeBuilder') {
+                        navigate('/resume-builder');
+                      } else {
+                        setActiveTab(tab.id);
+                      }
+                    }}
                     className={`w-full px-3 py-2 rounded-lg font-medium transition-all text-left flex items-center gap-2 text-sm ${
                       activeTab === tab.id 
                         ? 'bg-blue-600 text-white shadow-md' 
@@ -690,8 +697,8 @@ const StudentDashboard = () => {
               </div>
             )}
 
-            {/* Resume Builder Tab */}
-            {activeTab === 'resume' && (
+            {/* Resume Based Exam Tab */}
+            {activeTab === 'resumeExam' && (
               <div className="space-y-6">
                 {/* Upload Section */}
                 <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-6 text-white shadow-lg">

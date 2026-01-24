@@ -28,6 +28,7 @@ app.use('/api/targeted-assessments', require('./routes/targetedAssessmentRoutes'
 app.use('/api/resume-assessments', require('./routes/resumeAssessmentRoutes'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/interview', require('./routes/interviewRoutes'));
+app.use('/api/resume', require('./routes/resumeRoutes'));
 
 
 

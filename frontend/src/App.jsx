@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import MentorDashboard from './pages/MentorDashboard';
+import ResumeBuilder from './pages/ResumeBuilder';
 import TakeAssessment from './pages/TakeAssessment';
 import AssessmentResults from './components/AssessmentResults';
 import Interview from './pages/Interview';
@@ -54,6 +55,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['student']}>
             <StudentDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/resume-builder"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <ResumeBuilder />
           </ProtectedRoute>
         }
       />
