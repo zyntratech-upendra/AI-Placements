@@ -310,3 +310,109 @@ Score objectively. Penalize vague or incorrect answers.
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
         return json.loads(content)
+
+
+# ---------------------------
+# ADAPTIVE LEARNING - GENERATE TARGETED QUESTIONS
+# ---------------------------
+
+def generate_adaptive_questions(weak_areas: list, job_description: str, resume_text: str, 
+                               duration_seconds: int, interview_type: str, 
+                               previous_questions: list, practice_num: int = 1) -> list:
+    """
+    Generate adaptive interview questions focused on weak areas.
+    
+    Strategy:
+    1. Generate 1-2 follow-up questions on weak topics (improved difficulty)
+    2. Generate 2 completely new questions on similar topics
+    3. Total = 3-4 questions focusing on learning weak areas
+    
+    practice_num: 1 for first set of practice questions, 2 for second set (different variations)
+    """
+    client = get_clientgpt()
+    
+    # Extract weak topic descriptions
+    weak_topics = [wa.get("topic", "") for wa in weak_areas[:3]]
+    previous_question_texts = [q.get("text", "") for q in previous_questions]
+    
+    question_count = max(3, calculate_question_count(duration_seconds))
+    
+    practice_instruction = ""
+    if practice_num == 1:
+        practice_instruction = "Generate the FIRST set of practice questions focusing on weak areas."
+    elif practice_num == 2:
+        practice_instruction = "Generate the SECOND set of practice questions - DIFFERENT from practice set 1, but still focusing on weak areas."
+    
+    system_prompt = f"""You are an expert {interview_type.upper()} interview question generator specializing in adaptive learning.
+
+Your task: {practice_instruction}
+
+Requirements:
+1. Focus on the candidate's WEAK AREAS (topics they scored poorly on)
+2. Do NOT repeat exact questions from their previous interview
+3. Are slightly more challenging than before to help them improve
+4. Match the candidate's experience level (from resume)
+5. For practice set 2: Create variations that test the same concepts but from different angles
+
+Generate questions as a JSON array with this structure:
+{{
+  "questions": [
+    {{
+      "id": "unique-uuid-format-string",
+      "text": "Question text here",
+      "category": "topic category",
+      "difficulty": "medium or hard"
+    }},
+    ...
+  ]
+}}
+
+Output ONLY valid JSON. No markdown, no explanations."""
+
+    weak_topics_str = "\n".join([f"- {topic}" for topic in weak_topics])
+    
+    user_prompt = f"""Generate adaptive interview questions for improvement (Practice Set {practice_num}).
+
+WEAK AREAS (Topics candidate struggled with):
+{weak_topics_str}
+
+Candidate Resume:
+{resume_text}
+
+Job Description:
+{job_description}
+
+CONSTRAINTS:
+- Do NOT use these exact questions again: {previous_question_texts[:2]}
+- Focus on improving weak areas
+- Slightly more challenging than previous attempt
+- {interview_type.upper()} interview type
+- Generate exactly {question_count} questions
+- Practice Set {practice_num}: Generate {'different variations' if practice_num == 2 else 'direct follow-up questions'} on weak areas
+"""
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.8,
+            max_tokens=2000,
+        )
+    except Exception as e:
+        raise ValueError(f"Error calling LLM for adaptive questions: {str(e)}") from e
+
+    content = response.choices[0].message.content.strip()
+
+    try:
+        result = json.loads(content)
+        return result.get("questions", [])
+    except json.JSONDecodeError:
+        if "```json" in content:
+            content = content.split("```json")[1].split("```")[0].strip()
+        elif "```" in content:
+            content = content.split("```")[1].split("```")[0].strip()
+        result = json.loads(content)
+        return result.get("questions", [])

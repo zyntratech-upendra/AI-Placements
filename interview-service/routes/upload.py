@@ -63,34 +63,26 @@ async def upload_answer(
         while retry_count < max_retries:
             try:
                 with get_db() as db:
-                    existing = db.interview_answers.find_one({
-                        "session_id": session_id,
-                        "question_id": question_id
-                    })
-
-                    if existing:
-                        db.interview_answers.update_one(
-                            {"_id": existing["_id"]},
-                            {"$set": {
-                                "audio_path": audio_path_relative,
-                                "transcript": transcript,
-                                "updated_at": datetime.utcnow()
-                            }}
-                        )
-                    else:
-                        answer_doc = {
-                            "id": str(uuid.uuid4()),
-                            "session_id": session_id,
-                            "question_id": question_id,
-                            "audio_path": audio_path_relative,
-                            "transcript": transcript,
-                            "created_at": datetime.utcnow()
-                        }
-                        db.interview_answers.insert_one(answer_doc)
-
+                    # Update session with new answer in array
+                    answer_id = str(uuid.uuid4())
+                    
                     db.interview_sessions.update_one(
                         {"id": session_id},
-                        {"$set": {"status": "in_progress"}}
+                        {
+                            "$set": {
+                                "status": "in_progress",
+                                f"answers.{question_id}": {
+                                    "id": answer_id,
+                                    "question_id": question_id,
+                                    "audio_path": audio_path_relative,
+                                    "transcript": transcript,
+                                    "score": None,
+                                    "feedback": [],
+                                    "model_answer": None,
+                                    "created_at": datetime.utcnow()
+                                }
+                            }
+                        }
                     )
 
                 break

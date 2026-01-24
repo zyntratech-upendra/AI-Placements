@@ -29,12 +29,15 @@ async def analyze_session(session_id: str, request: Request):
                 jd_text = session.get("job_description", "")
                 resume_text = session.get("resume_text", "")
 
-                answers = list(db.interview_answers.find({"session_id": session_id}))
+                # Get answers from session document
+                answers_dict = session.get("answers", {})
+                answers = list(answers_dict.values()) if isinstance(answers_dict, dict) else []
                 q_map = {q["id"]: q.get("text", "") for q in questions}
 
                 total_score = 0
                 scored_count = 0
                 reference_cache = {}
+                updates = {}
 
                 for ans in answers:
                     if ans.get("score") is not None or not ans.get("transcript"):
@@ -66,12 +69,21 @@ async def analyze_session(session_id: str, request: Request):
                     total_score += score
                     scored_count += 1
 
-                    db.interview_answers.update_one(
-                        {"id": ans["id"]},
+                    # Store update for this answer
+                    updates[qid] = {
+                        "score": score,
+                        "feedback": feedback,
+                        "model_answer": reference_cache[qid]
+                    }
+
+                # Update all answers at once
+                for qid, update_data in updates.items():
+                    db.interview_sessions.update_one(
+                        {"id": session_id},
                         {"$set": {
-                            "score": score,
-                            "feedback": feedback,
-                            "model_answer": reference_cache[qid]
+                            f"answers.{qid}.score": update_data["score"],
+                            f"answers.{qid}.feedback": update_data["feedback"],
+                            f"answers.{qid}.model_answer": update_data["model_answer"]
                         }}
                     )
 
@@ -115,9 +127,9 @@ async def export_pdf(session_id: str, request: Request):
 
         session.pop("_id", None)
 
-        answers = list(db.interview_answers.find({"session_id": session_id}))
-        for a in answers:
-            a.pop("_id", None)
+        # Extract answers from session document
+        answers_dict = session.get("answers", {})
+        answers = list(answers_dict.values()) if isinstance(answers_dict, dict) else []
 
     pdf_bytes = generate_pdf_report(session, answers)
 

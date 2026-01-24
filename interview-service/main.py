@@ -16,6 +16,7 @@ from routes import rag  # RAG routes
 from routes import sync  # Sync routes
 from routes import recommendations  # LLM Recommendations routes
 from routes import resume_assessment  # Resume Assessment routes
+from routes import adaptive  # Adaptive Learning routes
 from database import get_mongodb_client
 from config import get_ocr_config
 from middleware.auth import AuthMiddleware
@@ -39,6 +40,7 @@ app.include_router(rag.router, prefix="/api")  # RAG Service routes
 app.include_router(sync.router, prefix="/api")  # Sync routes
 app.include_router(recommendations.router)  # LLM Recommendations
 app.include_router(resume_assessment.router, prefix="/api")  # Resume Assessment
+app.include_router(adaptive.router, prefix="/api")  # Adaptive Learning routes
 
 
 # Use absolute paths

@@ -27,6 +27,7 @@ app.use('/api/weak-areas', require('./routes/weakAreaRoutes'));
 app.use('/api/targeted-assessments', require('./routes/targetedAssessmentRoutes'));
 app.use('/api/resume-assessments', require('./routes/resumeAssessmentRoutes'));
 app.use('/api/jobs', require('./routes/jobs'));
+app.use('/api/interview', require('./routes/interviewRoutes'));
 
 
 

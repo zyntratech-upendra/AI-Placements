@@ -70,9 +70,12 @@ async def get_session(session_id: str, request: Request):
 
         session.pop("_id", None)
 
-        answers = list(db.interview_answers.find({"session_id": session_id}))
-        for a in answers:
-            a.pop("_id", None)
+        # Extract answers from session document
+        answers_dict = session.get("answers", {})
+        answers = list(answers_dict.values()) if isinstance(answers_dict, dict) else []
+        
+        # Sort by question index for consistent ordering
+        answers = sorted(answers, key=lambda x: x.get("created_at", datetime.utcnow()))
 
     return {
         "session": session,

@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -9,9 +9,21 @@ import MentorDashboard from './pages/MentorDashboard';
 import TakeAssessment from './pages/TakeAssessment';
 import AssessmentResults from './components/AssessmentResults';
 import Interview from './pages/Interview';
+import ResultsScreen from './components/Interview-frontend/ResultsScreen';
 import MyInterviews from './components/Interview-frontend/MyInterview';
 import PlacementTakeAssessment from './pages/PlacementTakeAssessment';
 import PlacementResult from './pages/PlacementResult';
+
+// Wrapper component to extract sessionId from URL params
+function InterviewResultsWrapper() {
+  const { sessionId } = useParams()
+  return (
+    <ResultsScreen 
+      sessionId={sessionId} 
+      onStartNew={() => window.location.href = '/interview'} 
+    />
+  )
+}
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -54,11 +66,21 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/my-interviews"
+        element={
+          <ProtectedRoute allowedRoles={['student']}>
+            <MyInterviews 
+              onOpenInterview={(sessionId) => window.location.href = `/student/interview-results/${sessionId}`}
+              onStartNew={() => window.location.href = '/interview'}
+            />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="student/interview-results/:sessionId"
         element={
-          <ProtectedRoute allowedRoles={['student']}> 
-
-            <MyInterviews />
+          <ProtectedRoute allowedRoles={['student']}>
+            <InterviewResultsWrapper />
           </ProtectedRoute>
         }
       />

@@ -15,6 +15,9 @@ function SetupScreen({ onSessionCreated }) {
     Authorization: `Bearer ${token}`
   }
 
+  const handleGoBack = () => {
+    window.history.back()
+  }
 
   const handleResumeChange = (e) => {
     const file = e.target.files[0]
@@ -78,8 +81,12 @@ function SetupScreen({ onSessionCreated }) {
 
   return (
     <div className="setup-screen">
+      <button className="back-button" onClick={handleGoBack}>
+        <span className="back-arrow">←</span> Back
+      </button>
       <div className="setup-container">
         <div className="setup-header">
+          <div className="header-icon">🎤</div>
           <h1>AI Interview Assistant</h1>
           <p>Upload your details to start your personalized interview</p>
         </div>

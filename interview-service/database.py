@@ -40,8 +40,7 @@ def get_mongodb_client():
 
         # Create indexes used by the application
         _db.interview_sessions.create_index("id", unique=True)
-        _db.interview_answers.create_index("id", unique=True)
-        _db.interview_answers.create_index([("session_id", 1), ("question_id", 1)])
+        _db.interview_sessions.create_index("user_id")
 
         # Perform a lightweight ping to verify connection and give a clear startup message
         logger = logging.getLogger("backend.database")

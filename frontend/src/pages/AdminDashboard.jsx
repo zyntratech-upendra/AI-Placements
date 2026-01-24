@@ -6,6 +6,7 @@ import UserManagement from '../components/admin/UserManagement';
 import AssessmentManagement from '../components/admin/AssessmentManagement';
 import PlacementExamBuilder from '../components/admin/PlacementExamBuilder';
 import JobManagement from '../components/admin/JobManagement';
+import InterviewManagement from '../components/admin/InterviewManagement';
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('folders');
   const [stats, setStats] = useState({
@@ -44,7 +45,8 @@ const AdminDashboard = () => {
     { id: 'users', label: 'User Management', icon: '👥' },
     { id: 'assessments', label: 'Assessments', icon: '📝' },
     { id: 'placement-exams', label: 'Placement Exams', icon: '🧩' },
-    { id: 'jobs', label: 'Job Portal', icon: '💼' }
+    { id: 'jobs', label: 'Job Portal', icon: '💼' },
+    { id: 'interview', label: 'Interview Questions', icon: '🎯' }
   ];
 
   return (
@@ -121,6 +123,7 @@ const AdminDashboard = () => {
             {activeTab === 'assessments' && <AssessmentManagement />}
             {activeTab === 'placement-exams' && <PlacementExamBuilder />}
             {activeTab === 'jobs' && <JobManagement />}
+            {activeTab === 'interview' && <InterviewManagement />}
           </div>
         </div>
       </div>
