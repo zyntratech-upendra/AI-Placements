@@ -18,19 +18,13 @@ const InterviewManagement = () => {
   // Form states
   const [companyForm, setCompanyForm] = useState({
     name: '',
-    description: '',
-    industry: '',
-    headquarters: ''
+    description: ''
   });
 
   const [questionForm, setQuestionForm] = useState({
     title: '',
-    description: '',
     category: 'Technical',
-    difficulty: 'Medium',
-    expectedAnswer: '',
-    tips: '',
-    tags: ''
+    difficulty: 'Medium'
   });
 
   const [filterCategory, setFilterCategory] = useState('');
@@ -85,9 +79,7 @@ const InterviewManagement = () => {
     setEditingCompany(null);
     setCompanyForm({
       name: '',
-      description: '',
-      industry: '',
-      headquarters: ''
+      description: ''
     });
     setShowCompanyModal(true);
   };
@@ -97,9 +89,7 @@ const InterviewManagement = () => {
     setEditingCompany(company);
     setCompanyForm({
       name: company.name,
-      description: company.description,
-      industry: company.industry,
-      headquarters: company.headquarters
+      description: company.description
     });
     setShowCompanyModal(true);
   };
@@ -171,12 +161,8 @@ const InterviewManagement = () => {
     setEditingQuestion(null);
     setQuestionForm({
       title: '',
-      description: '',
       category: 'Technical',
-      difficulty: 'Medium',
-      expectedAnswer: '',
-      tips: '',
-      tags: ''
+      difficulty: 'Medium'
     });
     setShowQuestionModal(true);
   };
@@ -186,21 +172,17 @@ const InterviewManagement = () => {
     setEditingQuestion(question);
     setQuestionForm({
       title: question.title,
-      description: question.description,
       category: question.category,
-      difficulty: question.difficulty,
-      expectedAnswer: question.expectedAnswer,
-      tips: question.tips,
-      tags: question.tags.join(', ')
+      difficulty: question.difficulty
     });
     setShowQuestionModal(true);
   };
 
   // Handle save question
-  const handleSaveQuestion = async () => {
+  const handleSaveQuestion = async (closeModal = true) => {
     try {
-      if (!questionForm.title.trim() || !questionForm.description.trim()) {
-        setError('Title and description are required');
+      if (!questionForm.title.trim()) {
+        setError('Question title is required');
         return;
       }
 
@@ -213,8 +195,13 @@ const InterviewManagement = () => {
       setError('');
 
       const questionData = {
-        ...questionForm,
-        tags: questionForm.tags.split(',').map(t => t.trim()).filter(t => t)
+        title: questionForm.title,
+        description: questionForm.title,
+        category: questionForm.category,
+        difficulty: questionForm.difficulty,
+        expectedAnswer: '',
+        tips: '',
+        tags: []
       };
 
       if (editingQuestion) {
@@ -222,6 +209,7 @@ const InterviewManagement = () => {
         const response = await api.put(`/interview/questions/${editingQuestion._id}`, questionData);
         setQuestions(questions.map(q => q._id === editingQuestion._id ? response.data.data : q));
         setSuccess('Question updated successfully');
+        setShowQuestionModal(false);
       } else {
         // Create new question
         const response = await api.post(
@@ -230,9 +218,19 @@ const InterviewManagement = () => {
         );
         setQuestions([response.data.data, ...questions]);
         setSuccess('Question added successfully');
+        
+        // Reset form for adding another question if not closing modal
+        if (!closeModal) {
+          setQuestionForm({
+            title: '',
+            category: 'Technical',
+            difficulty: 'Medium'
+          });
+        } else {
+          setShowQuestionModal(false);
+        }
       }
 
-      setShowQuestionModal(false);
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError('Failed to save question: ' + err.message);
@@ -490,31 +488,7 @@ const InterviewManagement = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Industry
-                </label>
-                <input
-                  type="text"
-                  value={companyForm.industry}
-                  onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
-                  placeholder="e.g., Technology, Finance"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Headquarters
-                </label>
-                <input
-                  type="text"
-                  value={companyForm.headquarters}
-                  onChange={(e) => setCompanyForm({ ...companyForm, headquarters: e.target.value })}
-                  placeholder="e.g., San Francisco, Mountain View"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -558,19 +532,6 @@ const InterviewManagement = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description *
-                </label>
-                <textarea
-                  value={questionForm.description}
-                  onChange={(e) => setQuestionForm({ ...questionForm, description: e.target.value })}
-                  placeholder="Detailed question description..."
-                  rows="3"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -606,44 +567,7 @@ const InterviewManagement = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Expected Answer
-                </label>
-                <textarea
-                  value={questionForm.expectedAnswer}
-                  onChange={(e) => setQuestionForm({ ...questionForm, expectedAnswer: e.target.value })}
-                  placeholder="Expected answer..."
-                  rows="2"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tips & Hints
-                </label>
-                <textarea
-                  value={questionForm.tips}
-                  onChange={(e) => setQuestionForm({ ...questionForm, tips: e.target.value })}
-                  placeholder="Tips for answering this question..."
-                  rows="2"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tags (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={questionForm.tags}
-                  onChange={(e) => setQuestionForm({ ...questionForm, tags: e.target.value })}
-                  placeholder="e.g., React, Hooks, Performance"
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
             </div>
 
             <div className="flex gap-3 mt-6">
@@ -651,14 +575,23 @@ const InterviewManagement = () => {
                 onClick={() => setShowQuestionModal(false)}
                 className="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded font-medium"
               >
-                Cancel
+                Close
               </button>
+              {!editingQuestion && (
+                <button
+                  onClick={() => handleSaveQuestion(false)}
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-medium disabled:opacity-50"
+                >
+                  {loading ? 'Saving...' : 'Add & Continue'}
+                </button>
+              )}
               <button
-                onClick={handleSaveQuestion}
+                onClick={() => handleSaveQuestion(true)}
                 disabled={loading}
                 className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-medium disabled:opacity-50"
               >
-                {loading ? 'Saving...' : 'Save'}
+                {loading ? 'Saving...' : editingQuestion ? 'Update' : 'Save'}
               </button>
             </div>
           </div>
