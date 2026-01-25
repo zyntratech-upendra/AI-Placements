@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import './InterviewScreen.css'
+import FaceDetectionService from '../../services/FaceDetectionService'
+import FaceDetectionOverlay from './FaceDetectionOverlay'
+import FaceAnalyticsDashboard from './FaceAnalyticsDashboard'
 
 function InterviewScreen({ sessionData, onComplete }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -12,6 +15,11 @@ function InterviewScreen({ sessionData, onComplete }) {
   const [recordingStopped, setRecordingStopped] = useState(false)
   const [isTimerRunning, setIsTimerRunning] = useState(true)
   const [speakingQuestion, setSpeakingQuestion] = useState(false)
+  const [faceData, setFaceData] = useState(null)
+  const [faceDetectionEnabled, setFaceDetectionEnabled] = useState(true)
+  const [faceAnalytics, setFaceAnalytics] = useState(null)
+  const [showAnalytics, setShowAnalytics] = useState(false)
+  const [presenceWarnings, setPresenceWarnings] = useState([])
 
   const videoRef = useRef(null)
   const mediaRecorderRef = useRef(null)
@@ -20,6 +28,8 @@ function InterviewScreen({ sessionData, onComplete }) {
   const questionTimerRef = useRef(null)
   const totalTimerRef = useRef(null)
   const totalInterviewTimeRef = useRef(sessionData.duration_seconds || 300)
+  const faceDetectionServiceRef = useRef(null)
+  const faceDetectionStartTimeRef = useRef(null)
 
   const questions = sessionData.questions || []
   const currentQuestion = questions[currentQuestionIndex]
@@ -33,6 +43,93 @@ const token = localStorage.getItem('token') // ✅ JWT
   const stopCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop())
+    }
+  }
+
+  /**
+   * Initialize face detection service and start detection
+   */
+  const initializeFaceDetection = async () => {
+    try {
+      const faceService = new FaceDetectionService()
+      await faceService.loadModels()
+      faceDetectionServiceRef.current = faceService
+      faceDetectionStartTimeRef.current = new Date()
+
+      // Start continuous detection
+      faceService.startDetection(videoRef.current, (detectionResults) => {
+        setFaceData(detectionResults)
+
+        // Check for critical alerts
+        if (detectionResults.presence && !detectionResults.presence.detected) {
+          const warning = {
+            id: Date.now(),
+            type: 'NO_FACE',
+            message: '⚠️ No face detected. Please ensure you are visible in the camera.',
+            severity: 'HIGH',
+          }
+          setPresenceWarnings(prev => [...prev.slice(-2), warning]) // Keep last 3 warnings
+        }
+
+        // Check for multiple faces
+        if (detectionResults.antiCheat?.multipleFaces) {
+          const warning = {
+            id: Date.now(),
+            type: 'MULTIPLE_FACES',
+            message: '⚠️ Multiple faces detected. Only one person allowed.',
+            severity: 'CRITICAL',
+          }
+          setPresenceWarnings(prev => [...prev.slice(-2), warning])
+        }
+
+        // Send face events to backend
+        sendFaceEventToBackend(detectionResults)
+      })
+
+      console.log('✅ Face detection initialized')
+    } catch (error) {
+      console.error('❌ Error initializing face detection:', error)
+      setFaceDetectionEnabled(false)
+    }
+  }
+
+  /**
+   * Send face detection events to backend for logging
+   */
+  const sendFaceEventToBackend = async (detectionResults) => {
+    try {
+      // Throttle to avoid too many requests (send every 5 seconds)
+      const now = Date.now()
+      if (!InterviewScreen.lastEventTime) {
+        InterviewScreen.lastEventTime = now
+      } else if (now - InterviewScreen.lastEventTime < 5000) {
+        return
+      }
+      InterviewScreen.lastEventTime = now
+
+      const eventData = {
+        session_id: sessionData.session_id,
+        question_id: currentQuestion?.id,
+        timestamp: new Date(),
+        presence: detectionResults.presence,
+        attention: detectionResults.attention,
+        emotion: detectionResults.emotion,
+        anti_cheat: detectionResults.antiCheat,
+      }
+
+      await fetch(
+        `http://localhost:8000/api/face-events/${sessionData.session_id}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(eventData),
+        }
+      )
+    } catch (error) {
+      console.error('Error sending face events:', error)
     }
   }
 
@@ -171,6 +268,13 @@ const token = localStorage.getItem('token') // ✅ JWT
     setAnalyzing(true)
     stopCamera()
 
+    // Stop face detection and get analytics
+    if (faceDetectionServiceRef.current) {
+      faceDetectionServiceRef.current.stopDetection()
+      const summary = faceDetectionServiceRef.current.getAnalyticsSummary(faceDetectionStartTimeRef.current)
+      setFaceAnalytics(summary)
+    }
+
     try {
       const response = await fetch(
         `http://localhost:8000/api/analyze/${sessionData.session_id}`,
@@ -181,7 +285,11 @@ const token = localStorage.getItem('token') // ✅ JWT
         throw new Error('Failed to analyze interview')
       }
 
-      onComplete()
+      setShowAnalytics(true)
+      // Delay onComplete to show analytics
+      setTimeout(() => {
+        onComplete()
+      }, 2000)
     } catch (error) {
       console.error('Error analyzing interview:', error)
       alert('Failed to analyze interview. Please check results manually.')
@@ -227,11 +335,21 @@ const token = localStorage.getItem('token') // ✅ JWT
     startCamera()
     setTotalTimeLeft(totalInterviewTimeRef.current)
 
+    // Initialize face detection
+    if (faceDetectionEnabled) {
+      initializeFaceDetection()
+    }
+
     return () => {
       stopCamera()
       if (questionTimerRef.current) clearInterval(questionTimerRef.current)
       if (totalTimerRef.current) clearInterval(totalTimerRef.current)
       window.speechSynthesis.cancel()
+
+      // Stop face detection
+      if (faceDetectionServiceRef.current) {
+        faceDetectionServiceRef.current.stopDetection()
+      }
     }
   }, [])
 
@@ -259,6 +377,18 @@ const token = localStorage.getItem('token') // ✅ JWT
 
   return (
     <div className="interview-screen">
+      {/* Show analytics modal when interview is complete */}
+      {showAnalytics && faceAnalytics && (
+        <div className="analytics-modal">
+          <div className="analytics-modal-content">
+            <FaceAnalyticsDashboard analytics={faceAnalytics} />
+            <div className="modal-footer">
+              <p>Interview analysis complete. Redirecting...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="interview-header">
         <div className="progress-info">
           <span className="question-number">
@@ -295,6 +425,13 @@ const token = localStorage.getItem('token') // ✅ JWT
             muted
             className="video-feed"
           />
+          {faceDetectionEnabled && faceData && (
+            <FaceDetectionOverlay
+              faceData={faceData}
+              videoElement={videoRef.current}
+              isRecording={recording}
+            />
+          )}
           {recording && (
             <div className="recording-indicator">
               <span className="recording-dot"></span>
@@ -312,6 +449,17 @@ const token = localStorage.getItem('token') // ✅ JWT
         <div className="question-section">
           <h2 className="question-title">Your Question</h2>
           <p className="question-text">{currentQuestion?.text}</p>
+
+          {/* Presence Warnings */}
+          {presenceWarnings.length > 0 && (
+            <div className="warnings-container">
+              {presenceWarnings.map(warning => (
+                <div key={warning.id} className={`warning warning-${warning.severity.toLowerCase()}`}>
+                  {warning.message}
+                </div>
+              ))}
+            </div>
+          )}
 
           {speakingQuestion && (
             <div className="status-message speaking">

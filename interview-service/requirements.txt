@@ -13,4 +13,6 @@ PyMuPDF==1.23.8
 # RAG Dependencies
 chromadb==0.4.22
 tiktoken==0.5.2
-
+# Face Detection Dependencies
+opencv-python==4.8.1.78
+numpy==1.24.3

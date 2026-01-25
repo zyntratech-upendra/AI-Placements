@@ -29,6 +29,7 @@ app.use('/api/resume-assessments', require('./routes/resumeAssessmentRoutes'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/interview', require('./routes/interviewRoutes'));
 app.use('/api/resume', require('./routes/resumeRoutes'));
+app.use('/', require('./routes/faceEventsRoutes')); // Face Events routes
 
 
 
