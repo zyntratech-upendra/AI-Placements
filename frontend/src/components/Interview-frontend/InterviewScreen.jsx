@@ -1,8 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './InterviewScreen.css'
-import FaceDetectionService from '../../services/FaceDetectionService'
-import FaceDetectionOverlay from './FaceDetectionOverlay'
-import FaceAnalyticsDashboard from './FaceAnalyticsDashboard'
+import FaceDetectionWebSocket from './FaceDetectionWebSocket'
 
 function InterviewScreen({ sessionData, onComplete }) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -15,11 +13,10 @@ function InterviewScreen({ sessionData, onComplete }) {
   const [recordingStopped, setRecordingStopped] = useState(false)
   const [isTimerRunning, setIsTimerRunning] = useState(true)
   const [speakingQuestion, setSpeakingQuestion] = useState(false)
-  const [faceData, setFaceData] = useState(null)
-  const [faceDetectionEnabled, setFaceDetectionEnabled] = useState(true)
-  const [faceAnalytics, setFaceAnalytics] = useState(null)
-  const [showAnalytics, setShowAnalytics] = useState(false)
-  const [presenceWarnings, setPresenceWarnings] = useState([])
+  const [faceDetectionStatus, setFaceDetectionStatus] = useState('wait')
+  const [faceDetectionMessage, setFaceDetectionMessage] = useState('')
+  const [alerts, setAlerts] = useState([])
+  const [interviewTerminated, setInterviewTerminated] = useState(false)
 
   const videoRef = useRef(null)
   const mediaRecorderRef = useRef(null)
@@ -28,8 +25,6 @@ function InterviewScreen({ sessionData, onComplete }) {
   const questionTimerRef = useRef(null)
   const totalTimerRef = useRef(null)
   const totalInterviewTimeRef = useRef(sessionData.duration_seconds || 300)
-  const faceDetectionServiceRef = useRef(null)
-  const faceDetectionStartTimeRef = useRef(null)
 
   const questions = sessionData.questions || []
   const currentQuestion = questions[currentQuestionIndex]
@@ -47,91 +42,70 @@ const token = localStorage.getItem('token') // ✅ JWT
   }
 
   /**
-   * Initialize face detection service and start detection
+   * Handle face detection alerts - debounced to prevent spam
    */
-  const initializeFaceDetection = async () => {
-    try {
-      const faceService = new FaceDetectionService()
-      await faceService.loadModels()
-      faceDetectionServiceRef.current = faceService
-      faceDetectionStartTimeRef.current = new Date()
-
-      // Start continuous detection
-      faceService.startDetection(videoRef.current, (detectionResults) => {
-        setFaceData(detectionResults)
-
-        // Check for critical alerts
-        if (detectionResults.presence && !detectionResults.presence.detected) {
-          const warning = {
-            id: Date.now(),
-            type: 'NO_FACE',
-            message: '⚠️ No face detected. Please ensure you are visible in the camera.',
-            severity: 'HIGH',
-          }
-          setPresenceWarnings(prev => [...prev.slice(-2), warning]) // Keep last 3 warnings
-        }
-
-        // Check for multiple faces
-        if (detectionResults.antiCheat?.multipleFaces) {
-          const warning = {
-            id: Date.now(),
-            type: 'MULTIPLE_FACES',
-            message: '⚠️ Multiple faces detected. Only one person allowed.',
-            severity: 'CRITICAL',
-          }
-          setPresenceWarnings(prev => [...prev.slice(-2), warning])
-        }
-
-        // Send face events to backend
-        sendFaceEventToBackend(detectionResults)
-      })
-
-      console.log('✅ Face detection initialized')
-    } catch (error) {
-      console.error('❌ Error initializing face detection:', error)
-      setFaceDetectionEnabled(false)
+  const lastAlertTimeRef = useRef(0)
+  const lastAlertMessageRef = useRef('')
+  
+  const handleFaceDetectionAlert = useCallback((status, message) => {
+    const now = Date.now()
+    
+    // Debounce: only process if different message or 2+ seconds passed
+    if (message === lastAlertMessageRef.current && (now - lastAlertTimeRef.current) < 2000) {
+      return
     }
-  }
+    
+    lastAlertTimeRef.current = now
+    lastAlertMessageRef.current = message
+    
+    setFaceDetectionStatus(status)
+    setFaceDetectionMessage(message)
+    
+    const alert = {
+      id: now,
+      status,
+      message,
+      timestamp: new Date()
+    }
+    
+    setAlerts(prev => {
+      const newAlerts = [...prev, alert]
+      // Keep only last 3 alerts to prevent UI clutter
+      return newAlerts.slice(-3)
+    })
+  }, [])
 
   /**
-   * Send face detection events to backend for logging
+   * Handle interview termination from face detection
    */
-  const sendFaceEventToBackend = async (detectionResults) => {
-    try {
-      // Throttle to avoid too many requests (send every 5 seconds)
-      const now = Date.now()
-      if (!InterviewScreen.lastEventTime) {
-        InterviewScreen.lastEventTime = now
-      } else if (now - InterviewScreen.lastEventTime < 5000) {
-        return
-      }
-      InterviewScreen.lastEventTime = now
-
-      const eventData = {
-        session_id: sessionData.session_id,
-        question_id: currentQuestion?.id,
-        timestamp: new Date(),
-        presence: detectionResults.presence,
-        attention: detectionResults.attention,
-        emotion: detectionResults.emotion,
-        anti_cheat: detectionResults.antiCheat,
-      }
-
-      await fetch(
-        `http://localhost:8000/api/face-events/${sessionData.session_id}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(eventData),
-        }
-      )
-    } catch (error) {
-      console.error('Error sending face events:', error)
+  const terminationHandledRef = useRef(false)
+  const handleInterviewTermination = useCallback(async (reason) => {
+    // Prevent multiple termination calls
+    if (terminationHandledRef.current) {
+      return
     }
-  }
+    terminationHandledRef.current = true
+    
+    setInterviewTerminated(true)
+    setFaceDetectionStatus('terminate')
+    setFaceDetectionMessage(reason)
+    
+    // Stop recording if active
+    if (recording) {
+      stopRecording()
+      await new Promise(resolve => setTimeout(resolve, 1000))
+    }
+    
+    // Wait for any uploads to complete (with timeout)
+    let waitCount = 0
+    while (uploading && waitCount < 50) {
+      await new Promise(resolve => setTimeout(resolve, 100))
+      waitCount++
+    }
+    
+    // Analyze and complete interview
+    await analyzeInterview()
+  }, [recording, uploading])
 
   const startCamera = async () => {
     try {
@@ -140,9 +114,6 @@ const token = localStorage.getItem('token') // ✅ JWT
         audio: true
       })
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-      }
       setCameraReady(true)
     } catch (error) {
       console.error('Error accessing camera:', error)
@@ -268,13 +239,6 @@ const token = localStorage.getItem('token') // ✅ JWT
     setAnalyzing(true)
     stopCamera()
 
-    // Stop face detection and get analytics
-    if (faceDetectionServiceRef.current) {
-      faceDetectionServiceRef.current.stopDetection()
-      const summary = faceDetectionServiceRef.current.getAnalyticsSummary(faceDetectionStartTimeRef.current)
-      setFaceAnalytics(summary)
-    }
-
     try {
       const response = await fetch(
         `http://localhost:8000/api/analyze/${sessionData.session_id}`,
@@ -285,8 +249,7 @@ const token = localStorage.getItem('token') // ✅ JWT
         throw new Error('Failed to analyze interview')
       }
 
-      setShowAnalytics(true)
-      // Delay onComplete to show analytics
+      // Delay onComplete to show results
       setTimeout(() => {
         onComplete()
       }, 2000)
@@ -335,21 +298,11 @@ const token = localStorage.getItem('token') // ✅ JWT
     startCamera()
     setTotalTimeLeft(totalInterviewTimeRef.current)
 
-    // Initialize face detection
-    if (faceDetectionEnabled) {
-      initializeFaceDetection()
-    }
-
     return () => {
       stopCamera()
       if (questionTimerRef.current) clearInterval(questionTimerRef.current)
       if (totalTimerRef.current) clearInterval(totalTimerRef.current)
       window.speechSynthesis.cancel()
-
-      // Stop face detection
-      if (faceDetectionServiceRef.current) {
-        faceDetectionServiceRef.current.stopDetection()
-      }
     }
   }, [])
 
@@ -377,14 +330,30 @@ const token = localStorage.getItem('token') // ✅ JWT
 
   return (
     <div className="interview-screen">
-      {/* Show analytics modal when interview is complete */}
-      {showAnalytics && faceAnalytics && (
-        <div className="analytics-modal">
-          <div className="analytics-modal-content">
-            <FaceAnalyticsDashboard analytics={faceAnalytics} />
-            <div className="modal-footer">
-              <p>Interview analysis complete. Redirecting...</p>
-            </div>
+      {/* Show termination message */}
+      {interviewTerminated && (
+        <div className="termination-modal" style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '8px',
+            maxWidth: '500px',
+            textAlign: 'center'
+          }}>
+            <h2 style={{ color: '#ef4444', marginBottom: '15px' }}>Interview Terminated</h2>
+            <p>{faceDetectionMessage}</p>
+            <p style={{ marginTop: '15px', color: '#666' }}>Generating feedback...</p>
           </div>
         </div>
       )}
@@ -418,23 +387,33 @@ const token = localStorage.getItem('token') // ✅ JWT
 
       <div className="interview-content">
         <div className="video-section">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            muted
-            className="video-feed"
+          <FaceDetectionWebSocket
+            sessionId={sessionData.session_id}
+            onTerminate={handleInterviewTermination}
+            onAlert={handleFaceDetectionAlert}
           />
-          {faceDetectionEnabled && faceData && (
-            <FaceDetectionOverlay
-              faceData={faceData}
-              videoElement={videoRef.current}
-              isRecording={recording}
-            />
-          )}
           {recording && (
-            <div className="recording-indicator">
-              <span className="recording-dot"></span>
+            <div className="recording-indicator" style={{
+              position: 'absolute',
+              top: '10px',
+              right: '10px',
+              backgroundColor: '#ef4444',
+              color: 'white',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              zIndex: 100,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            }}>
+              <span style={{
+                width: '10px',
+                height: '10px',
+                backgroundColor: 'white',
+                borderRadius: '50%',
+                animation: 'pulse 1s infinite'
+              }}></span>
               Recording
             </div>
           )}
@@ -450,12 +429,48 @@ const token = localStorage.getItem('token') // ✅ JWT
           <h2 className="question-title">Your Question</h2>
           <p className="question-text">{currentQuestion?.text}</p>
 
-          {/* Presence Warnings */}
-          {presenceWarnings.length > 0 && (
-            <div className="warnings-container">
-              {presenceWarnings.map(warning => (
-                <div key={warning.id} className={`warning warning-${warning.severity.toLowerCase()}`}>
-                  {warning.message}
+          {/* Face Detection Alerts */}
+          {alerts.length > 0 && (
+            <div className="warnings-container" style={{
+              marginBottom: '20px',
+              marginTop: '10px'
+            }}>
+              {alerts.slice(-3).map(alert => (
+                <div
+                  key={alert.id}
+                  className={`warning warning-${alert.status}`}
+                  style={{
+                    padding: '12px 16px',
+                    marginBottom: '8px',
+                    borderRadius: '6px',
+                    backgroundColor:
+                      alert.status === 'warning'
+                        ? '#fef3c7'
+                        : alert.status === 'alert'
+                        ? '#fee2e2'
+                        : '#f3f4f6',
+                    color:
+                      alert.status === 'warning'
+                        ? '#92400e'
+                        : alert.status === 'alert'
+                        ? '#991b1b'
+                        : '#374151',
+                    borderLeft: `4px solid ${
+                      alert.status === 'warning'
+                        ? '#f59e0b'
+                        : alert.status === 'alert'
+                        ? '#ef4444'
+                        : '#6b7280'
+                    }`,
+                    fontWeight: '500',
+                    fontSize: '14px',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  <span style={{ marginRight: '8px' }}>
+                    {alert.status === 'warning' ? '⚠️' : alert.status === 'alert' ? '🚨' : 'ℹ️'}
+                  </span>
+                  {alert.message}
                 </div>
               ))}
             </div>
