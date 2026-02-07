@@ -10,6 +10,18 @@ router = APIRouter()
 
 @router.post("/analyze/{session_id}")
 async def analyze_session(session_id: str, request: Request):
+    """
+    Analyze interview session and generate scores
+    
+    This endpoint:
+    1. Waits for any pending transcriptions to complete
+    2. Evaluates all transcribed answers
+    3. Generates reference answers
+    4. Calculates final score
+    5. Marks session as completed
+    
+    Note: If transcriptions are still processing, returns status info
+    """
     user_id = request.state.user["_id"]
     retries = 0
 
@@ -24,13 +36,34 @@ async def analyze_session(session_id: str, request: Request):
                 if not session:
                     raise HTTPException(status_code=404, detail="Session not found")
 
+                # Check if any transcriptions are still pending
+                answers_dict = session.get("answers", {})
+                pending_count = 0
+                processing_count = 0
+                
+                for ans in answers_dict.values():
+                    status = ans.get("transcription_status", "completed")
+                    if status == "queued":
+                        pending_count += 1
+                    elif status == "processing":
+                        processing_count += 1
+                
+                # If transcriptions are pending, return status instead of analyzing
+                if pending_count > 0 or processing_count > 0:
+                    return {
+                        "status": "transcription_pending",
+                        "message": f"Waiting for {pending_count + processing_count} transcriptions to complete",
+                        "pending_count": pending_count,
+                        "processing_count": processing_count,
+                        "retry_after": 5  # Suggest retry after 5 seconds
+                    }
+
                 questions = session.get("questions", [])
                 interview_type = session.get("interview_type", "technical")
                 jd_text = session.get("job_description", "")
                 resume_text = session.get("resume_text", "")
 
                 # Get answers from session document
-                answers_dict = session.get("answers", {})
                 answers = list(answers_dict.values()) if isinstance(answers_dict, dict) else []
                 q_map = {q["id"]: q.get("text", "") for q in questions}
 
@@ -40,7 +73,14 @@ async def analyze_session(session_id: str, request: Request):
                 updates = {}
 
                 for ans in answers:
-                    if ans.get("score") is not None or not ans.get("transcript"):
+                    # Skip if already scored or no transcript
+                    if ans.get("score") is not None:
+                        # Count already scored answers
+                        total_score += ans.get("score", 0)
+                        scored_count += 1
+                        continue
+                    
+                    if not ans.get("transcript"):
                         continue
 
                     qid = ans.get("question_id")
@@ -102,7 +142,8 @@ async def analyze_session(session_id: str, request: Request):
 
             return {
                 "status": "success",
-                "final_score": final_score
+                "final_score": final_score,
+                "scored_count": scored_count
             }
 
         except Exception as e:
